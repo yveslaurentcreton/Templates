@@ -1,0 +1,67 @@
+# Variables to add in Azure DevOps:
+# - ExampleVariable
+
+variables:
+  InternalNuGetFeed: ''
+
+trigger: none
+
+stages:
+  - stage: Build
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+
+      - job: Build
+        steps:
+
+          - task: DotNetCoreCLI@2
+            inputs:
+              command: 'build'
+              projects: '**/*.csproj'
+              arguments: '--configuration $(BuildConfiguration)'
+            displayName: 'Build'
+            
+          - task: DotNetCoreCLI@2
+            inputs:
+              command: 'test'
+              projects: '**/*[Tt]ests/*.csproj'
+              arguments: '--configuration $(BuildConfiguration)'
+            displayName: 'Test'
+            
+          - task: DotNetCoreCLI@2
+            inputs:
+              command: 'pack'
+              packagesToPack: '**/*.csproj'
+              arguments: '--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+            displayName: 'Pack'
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: $(Build.ArtifactStagingDirectory)
+              artifactName: NugetBuild
+            displayName: 'Publish build artifacts'
+
+  - stage: Deploy
+    dependsOn: Build
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+
+      - job: DeployToFeed
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+
+          - checkout: none
+
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              artifact: NugetBuild
+
+          - task: NuGetCommand@2
+            inputs:
+              command: 'push'
+              packagesToPush: '$(Pipeline.Workspace)/*.nupkg'
+              nuGetFeedType: 'internal'
+              publishVstsFeed: '$(InternalNuGetFeed)'
