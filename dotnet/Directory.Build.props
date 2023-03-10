@@ -1,0 +1,11 @@
+<Project>
+	<PropertyGroup>
+		<Version>0.1.0</Version>
+		<AssemblyVersion>0.1.0</AssemblyVersion>
+		<Authors>Author</Authors>
+		<Company>Company</Company>
+		<Product>Product</Product>
+		<Copyright>© 2023 Company</Copyright>
+		<Description>Description</Description>
+	</PropertyGroup>
+</Project>
