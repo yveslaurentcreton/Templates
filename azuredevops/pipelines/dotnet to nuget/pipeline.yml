@@ -49,8 +49,6 @@ stages:
     jobs:
 
       - job: DeployToFeed
-        pool:
-          vmImage: ubuntu-latest
         steps:
 
           - checkout: none
