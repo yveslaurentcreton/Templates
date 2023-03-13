@@ -4,7 +4,14 @@
 variables:
   InternalNuGetFeed: ''
 
-trigger: none
+trigger:
+  branches:
+    include:
+      - develop
+      - release/*
+  tags:
+    include:
+      - '*'
 
 stages:
   - stage: Build
