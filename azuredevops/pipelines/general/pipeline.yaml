@@ -1,0 +1,31 @@
+# Variables to add in Azure DevOps:
+# - ExampleVariable
+
+variables:
+  IsMain: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
+
+trigger:
+  branches:
+    include:
+      - develop
+      - release/*
+  tags:
+    include:
+      - '*'
+
+stages:
+  - stage: Build
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+      - powershell: 'Write-Output "This is the build step."'
+        displayName: "PowerShell script"
+
+  - stage: Deploy
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables.IsMain, 'true'))
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+      - powershell: 'Write-Output "This is the deploy step."'
+        displayName: "PowerShell script"
