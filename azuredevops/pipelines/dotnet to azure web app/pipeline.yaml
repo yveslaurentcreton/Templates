@@ -1,0 +1,161 @@
+
+# Variables to add in Azure DevOps:
+# - ExampleVariable
+
+variables:
+  azure_subscription: ''
+
+parameters:
+  - name: development
+    displayName: Development
+    type: boolean
+    default: true
+  - name: test
+    displayName: Test
+    type: boolean
+    default: true
+  - name: staging
+    displayName: Staging
+    type: boolean
+    default: true
+  - name: production
+    displayName: Production
+    type: boolean
+    default: true
+
+trigger:
+  branches:
+    include:
+      - develop
+      - release/*
+  paths:
+    exclude:
+      - .azuredevops/*
+  tags:
+    include:
+      - '*'
+
+stages:
+  - stage: Build
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+      - job: Build
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: gitversion/setup@0
+            inputs:
+              versionSpec: '5.x'
+            displayName: 'Setup GitVersion'
+
+          - task: gitversion/execute@0
+            inputs:
+              updateAssemblyInfo: true
+            displayName: 'Execute GitVersion'
+
+          - script: |
+              echo "##vso[task.setvariable variable=PreReleaseLabel;isOutput=true]$(GitVersion.PreReleaseLabel)"
+            displayName: 'Set PreReleaseLabel variable'
+            name: variables
+
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                # Set the path to the Directory.Build.props file
+                $propsFilePath = "Directory.Build.props"
+
+                # Load the contents of the file
+                $propsFile = [xml](Get-Content $propsFilePath)
+
+                # Update the version number if they are not equal
+                $propsFile.Project.PropertyGroup.Version = "$(GitVersion.SemVer)"
+                $propsFile.Project.PropertyGroup.AssemblyVersion = "$(GitVersion.AssemblySemVer)"
+                $propsFile.Save($propsFilePath)
+            displayName: 'Update Directory.Build.props version'
+            
+          - task: DotNetCoreCLI@2
+            inputs:
+              command: 'restore'
+              projects: '**/*.csproj'
+              feedsToUse: 'config'
+              nugetConfigPath: 'NuGet.config'
+            displayName: 'Restore'
+
+          - task: DotNetCoreCLI@2
+            inputs:
+              projects: '**/*.csproj'
+              arguments: '--configuration $(BuildConfiguration)'
+            displayName: 'Build'
+
+          - task: DotNetCoreCLI@2
+            inputs:
+              command: 'test'
+              projects: '**/*[Tt]ests/*.csproj'
+              arguments: '--configuration $(BuildConfiguration)'
+            displayName: 'Test'
+
+          - task: DotNetCoreCLI@2
+            inputs:
+              command: 'publish'
+              publishWebProjects: true
+              projects: '**/*.csproj'
+              arguments: '--configuration $(BuildConfiguration) --output $(build.artifactstagingdirectory)'
+              zipAfterPublish: True
+            displayName: 'Publish'
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(build.artifactstagingdirectory)'
+              publishLocation: 'Container'
+            displayName: 'Publish Artifact'
+
+  - stage: DeployToDevelopment
+    dependsOn: Build
+    condition: and(succeeded(), eq('${{ parameters.development }}', true))
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+    - template: ./templates/deploy-template.yaml
+      parameters:
+        azure_subscription: $(azure_subscription)
+        webapp_name: 'example-development-webapp'
+        deployable_package: '$(System.DefaultWorkingDirectory)/**/Example.Project.zip' # Change this to the name of your project
+
+  - stage: DeployToTest
+    dependsOn: Build
+    condition: and(succeeded(), eq(dependencies.Build.outputs['Build.variables.PreReleaseLabel'], 'alpha'), eq('${{ parameters.test }}', true))
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+    - template: ./templates/deploy-template.yaml
+      parameters:
+        azure_subscription: $(azure_subscription)
+        webapp_name: 'example-test-webapp'
+        deployable_package: '$(System.DefaultWorkingDirectory)/**/Example.Project.zip' # Change this to the name of your project
+
+  - stage: DeployToStaging
+    dependsOn: Build
+    condition: and(succeeded(), eq(dependencies.Build.outputs['Build.variables.PreReleaseLabel'], 'beta'), eq('${{ parameters.staging }}', true))
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+    - template: ./templates/deploy-template.yaml
+      parameters:
+        azure_subscription: $(azure_subscription)
+        webapp_name: 'example-staging-webapp'
+        deployable_package: '$(System.DefaultWorkingDirectory)/**/Example.Project.zip' # Change this to the name of your project
+
+  - stage: DeployToProduction
+    dependsOn: Build
+    condition: and(succeeded(), eq(dependencies.Build.outputs['Build.variables.PreReleaseLabel'], ''), eq('${{ parameters.production }}', true))
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+    - template: ./templates/deploy-template.yaml
+      parameters:
+        azure_subscription: $(azure_subscription)
+        webapp_name: 'example-production-webapp'
+        deployable_package: '$(System.DefaultWorkingDirectory)/**/Example.Project.zip' # Change this to the name of your project

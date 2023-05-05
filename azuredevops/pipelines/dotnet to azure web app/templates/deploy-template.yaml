@@ -1,0 +1,29 @@
+parameters:
+- name: azure_subscription
+  type: string
+- name: webapp_name
+  type: string
+- name: deployable_package
+  type: string
+
+jobs:
+  - job: Deploy
+    steps:
+      - checkout: none
+        
+      - task: DownloadPipelineArtifact@2
+        displayName: 'Download artifacts'
+        inputs:
+          buildType: 'current'
+          artifactName: 'drop'
+          targetPath: '$(System.DefaultWorkingDirectory)'
+
+      - task: AzureRmWebAppDeployment@4
+        displayName: 'Deploy Web App'
+        inputs:
+          ConnectionType: 'AzureRM'
+          azureSubscription: ${{ parameters.azure_subscription }}
+          appType: 'webAppLinux'
+          WebAppName: ${{ parameters.webapp_name }}
+          packageForLinux: ${{ parameters.deployable_package }}
+          RuntimeStack: 'DOTNETCORE|6.0'
